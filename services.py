@@ -7,6 +7,8 @@ from io import BytesIO
 # from elevenlabs.client import ElevenLabs
 from playsound import playsound
 import logging
+from dotenv import load_dotenv
+
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', filename='app.log', filemode='w')
 
 class AudioRecorder:
@@ -41,11 +43,46 @@ class AudioRecorder:
         except Exception as e:
             logging.error(f"Recording failed: {e}")
 
+class STTService:
+    """
+    Speech-to-Text service using Groq Whisper API.
+    """
+    def __init__(self, api_key: str, model: str = "whisper-large-v3"):
+        self.client = Groq(api_key=api_key)
+        self.model = model
+
+    def transcribe(self, audio_path: str) -> str:
+        """
+        Transcribe audio file to text.
+
+        Args:
+            audio_path: Path to the audio file.
+        Returns:
+            The transcription text.
+        """
+        try:
+            logging.info(f"Starting transcription for {audio_path} using model {self.model}.")
+            with open(audio_path, "rb") as f:
+                transcription = self.client.audio.transcriptions.create(
+                    model=self.model,
+                    file=f,
+                    language="en"
+                )
+            logging.info("Transcription successful.")
+            return transcription.text
+        except Exception as e:
+            logging.error(f"Transcription failed: {e}")
+            return ""
 
 
 if __name__ == "__main__":
-    # Example usage
-    audio_recorder = AudioRecorder(timeout=10, phrase_time_limit=5)
-    audio_recorder.record("test_audio.mp3")
+    # Example usage  
 
+    recorder = AudioRecorder(timeout=20, phrase_time_limit=10)
+    recorder.record("test_audio.mp3")
+    load_dotenv()
+    groq_api_key = os.getenv("GROQ_API_KEY")
+    stt_service = STTService(api_key=groq_api_key)
+    transcription = stt_service.transcribe("test_audio.mp3")
+    print("Transcription:", transcription)
     
