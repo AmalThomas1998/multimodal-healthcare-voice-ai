@@ -74,15 +74,60 @@ class STTService:
             logging.error(f"Transcription failed: {e}")
             return ""
 
+class VisionService:
+    """
+    Vision-enabled LLM service for image analysis using Groq API.
+    """
+    def __init__(self, api_key: str, model: str = "meta-llama/llama-4-scout-17b-16e-instruct"):
+        self.client = Groq(api_key=api_key)
+        self.model = model
+
+    def analyze(self, prompt: str, image_path: str) -> str:
+        """
+        Analyze an image along with a text prompt.
+
+        Args:
+            prompt: The textual instruction or question.
+            image_path: Path to the image file.
+        Returns:
+            The model's textual response.
+        """
+        try:
+            logging.info(f"Starting image analysis for {image_path} with prompt: {prompt}")
+            with open(image_path, "rb") as f:
+                b64 = base64.b64encode(f.read()).decode("utf-8")
+
+            messages = [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": prompt},
+                        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}},
+                    ],
+                }
+            ]
+            response = self.client.chat.completions.create(
+                messages=messages,
+                model=self.model
+            )
+            logging.info("Image analysis successful.")            
+            return response.choices[0].message.content
+        except Exception as e:
+            logging.error(f"Image analysis failed: {e}")
+            return ""
+
 
 if __name__ == "__main__":
     # Example usage  
 
-    recorder = AudioRecorder(timeout=20, phrase_time_limit=10)
-    recorder.record("test_audio.mp3")
+    # recorder = AudioRecorder(timeout=20, phrase_time_limit=10)
+    # recorder.record("test_audio.mp3")
     load_dotenv()
     groq_api_key = os.getenv("GROQ_API_KEY")
-    stt_service = STTService(api_key=groq_api_key)
-    transcription = stt_service.transcribe("test_audio.mp3")
-    print("Transcription:", transcription)
+    # stt_service = STTService(api_key=groq_api_key)
+    # transcription = stt_service.transcribe("test_audio.mp3")
+    # print("Transcription:", transcription)
+
+    vision_service = VisionService(api_key=groq_api_key)
+    image_analysis = vision_service.analyze("Analyze this image", "test_image.jpg")
     
