@@ -8,8 +8,19 @@ from io import BytesIO
 from playsound import playsound
 import logging
 from dotenv import load_dotenv
+from gtts import gTTS
+import elevenlabs
+from elevenlabs.client import ElevenLabs
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', filename='app.log', filemode='w')
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('app.log', mode='w'),
+        logging.StreamHandler()
+    ]
+)
 
 class AudioRecorder:
     """
@@ -115,19 +126,93 @@ class VisionService:
         except Exception as e:
             logging.error(f"Image analysis failed: {e}")
             return ""
+        
+class TTSService:
+    """
+    Text-to-Speech service with optional ElevenLabs engine.
 
+    Args:
+        elevenlabs_api_key: API key for ElevenLabs. If provided, the ElevenLabs engine can be used for TTS.
+    """
+    def __init__(self, elevenlabs_api_key: str = None):
+        self.elevenlabs_api_key = elevenlabs_api_key
+
+    def speak(self, text: str, outfile: str, engine: str = "gtts") -> str:
+        """
+        Convert text to speech and save/play it.
+
+        Args:
+            text: The text to speak.
+            outfile: Output file path for the audio.
+            engine: Which TTS engine to use ('gtts' or 'eleven').
+        Returns:
+            The path to the output audio file.
+        """
+        try:
+            logging.info(f"Starting TTS with engine '{engine}' for text: {text}")
+            
+            if engine == "eleven" and self.elevenlabs_api_key:
+               
+                client = ElevenLabs(api_key=self.elevenlabs_api_key)
+                audio = client.generate(
+                    text=text,
+                    voice="Arnold",
+                    output_format="mp3_22050_32",
+                    model="eleven_turbo_v2"
+                )
+                elevenlabs.save(audio, outfile)
+                logging.info(f"Audio generated and saved to {outfile} using ElevenLabs.")
+            else:
+                tts = gTTS(text=text, lang="en", slow=False)
+                tts.save(outfile)
+                logging.info(f"Audio generated and saved to {outfile} using gTTS.")
+
+            playsound(outfile)
+            logging.info(f"Audio playback completed for {outfile}.")
+            return outfile
+        except Exception as e:
+            logging.error(f"TTS failed: {e}")
+            return ""
+
+class DoctorBot:
+    def __init__(self, stt: STTService, vision: VisionService, tts: TTSService):
+        self.stt = stt
+        self.vision = vision
+        self.tts = tts
+
+    def handle(self, audio_fp, image_fp=None):
+        text = self.stt.transcribe(audio_fp)
+        if image_fp:
+            reply = self.vision.analyze(text, image_fp)
+        else:
+            reply = "No image provided."
+        self.tts.speak(reply, "final.mp3")
+        return text, reply, "final.mp3"
 
 if __name__ == "__main__":
     # Example usage  
 
     # recorder = AudioRecorder(timeout=20, phrase_time_limit=10)
+    # print("Recording audio for 20 seconds...")
     # recorder.record("test_audio.mp3")
     load_dotenv()
     groq_api_key = os.getenv("GROQ_API_KEY")
-    # stt_service = STTService(api_key=groq_api_key)
-    # transcription = stt_service.transcribe("test_audio.mp3")
+    elevenlabs_api_key = os.getenv("ELEVENLABS_API_KEY")
+    
+    stt_service = STTService(api_key=groq_api_key)
+    # transcription = stt_service.transcribe(r"C:\Users\athul\OneDrive\Desktop\Medical Chatbot 2.0\patient_voice.mp3")
     # print("Transcription:", transcription)
 
     vision_service = VisionService(api_key=groq_api_key)
-    image_analysis = vision_service.analyze("Analyze this image", "test_image.jpg")
+    # image_analysis = vision_service.analyze("Analyze this image", "test_image.jpg")
+
+    tts_service = TTSService(elevenlabs_api_key=elevenlabs_api_key)
+    # # tts_service.speak("Hello, this is a test.", "output.mp3", engine="eleven")
+    # tts_service.speak("Hello, this is a test.", "output.mp3", engine="gtts")
+
+    doctor_bot = DoctorBot(stt=stt_service, vision=vision_service, tts=tts_service)
+    text, reply, audio_fp = doctor_bot.handle("test.mp3", "test_image.jpg")
+    print("Transcription:", text)
+    print("Reply:", reply)  
+    print("Audio file path:", audio_fp)
     
